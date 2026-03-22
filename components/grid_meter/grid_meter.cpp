@@ -37,8 +37,9 @@ void GridMeterComponent::setup() {
     return;
   }
 
-  // 2. Initialise register bank to zero
+  // 2. Initialise register bank to zero, then set constant identification fields
   memset(registers_, 0, sizeof(registers_));
+  registers_[0x000B] = DEVICE_ID_ET112;  // CG identification code (register 0x000B)
 
   // 3. Open non-blocking TCP socket on port 502
   server_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -123,30 +124,28 @@ void GridMeterComponent::refresh_sensors_() {
     write_int32_(registers_, 4, 0);
   }
 
-  // Registers 6-13: reserved, already zero from setup()
-
-  // Energy import total (uint32, x0.1 Wh) -- zero on NaN
+  // Energy import total (uint32, x0.1 kWh) at 0x0010-0x0011 -- zero on NaN
   float ei1 = energy_import_t1_->get_state();
   float ei2 = energy_import_t2_->get_state();
   if (!std::isnan(ei1) && !std::isnan(ei2)) {
     double kwh = (double)ei1 + (double)ei2;
-    double raw = kwh * 10000.0;
+    double raw = kwh * 10.0;  // 1 unit = 0.1 kWh
     raw = std::max(0.0, std::min(raw, (double)UINT32_MAX));
-    write_uint32_(registers_, 14, (uint32_t)raw);
+    write_uint32_(registers_, 0x10, (uint32_t)raw);
   } else {
-    write_uint32_(registers_, 14, 0);
+    write_uint32_(registers_, 0x10, 0);
   }
 
-  // Energy export total (uint32, x0.1 Wh) -- zero on NaN
+  // Energy export total (uint32, x0.1 kWh) at 0x0020-0x0021 -- zero on NaN
   float ee1 = energy_export_t1_->get_state();
   float ee2 = energy_export_t2_->get_state();
   if (!std::isnan(ee1) && !std::isnan(ee2)) {
     double kwh = (double)ee1 + (double)ee2;
-    double raw = kwh * 10000.0;
+    double raw = kwh * 10.0;  // 1 unit = 0.1 kWh
     raw = std::max(0.0, std::min(raw, (double)UINT32_MAX));
-    write_uint32_(registers_, 16, (uint32_t)raw);
+    write_uint32_(registers_, 0x20, (uint32_t)raw);
   } else {
-    write_uint32_(registers_, 16, 0);
+    write_uint32_(registers_, 0x20, 0);
   }
 }
 
@@ -248,19 +247,21 @@ void GridMeterComponent::handle_frame_(Client &c, uint16_t frame_len) {
     uint16_t count = (c.buf[10] << 8) | c.buf[11];
     ESP_LOGI(TAG, "FC%02X start=0x%04X count=%u", fc, start, count);
 
-    // Bounds check using uint32 to prevent wrap-around on malformed frames
-    if ((uint32_t)start + (uint32_t)count > (uint32_t)REG_COUNT) {
-      send_exception_(c.fd, txid, uid, fc, 0x02);
+    // Reject malformed count (0 or more than our buffer can hold)
+    if (count == 0 || count > REG_COUNT) {
+      send_exception_(c.fd, txid, uid, fc, 0x03);  // Illegal Data Value
       return;
     }
 
-    // Fixed-size array (max 18 registers = 38 bytes) avoids non-standard VLA
+    // Fixed-size buffer; addresses beyond REG_COUNT return 0 (no exception)
     uint8_t pdu[2 + REG_COUNT * 2];
     pdu[0] = fc;
     pdu[1] = (uint8_t)(count * 2);
     for (uint16_t i = 0; i < count; i++) {
-      pdu[2 + i * 2]     = registers_[start + i] >> 8;
-      pdu[2 + i * 2 + 1] = registers_[start + i] & 0xFF;
+      uint32_t addr = (uint32_t)start + i;
+      uint16_t val  = (addr < REG_COUNT) ? registers_[addr] : 0;
+      pdu[2 + i * 2]     = val >> 8;
+      pdu[2 + i * 2 + 1] = val & 0xFF;
     }
     send_response_(c.fd, txid, uid, pdu, (uint8_t)(2 + count * 2));
 

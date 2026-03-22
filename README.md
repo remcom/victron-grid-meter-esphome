@@ -8,20 +8,22 @@ The component runs a Modbus TCP server directly on the ESP32. On each loop itera
 
 ## Register map (Carlo Gavazzi ET112)
 
-| Address     | Field               | Type   | Scale    |
-|-------------|---------------------|--------|----------|
-| 0x0000–0x0001 | L1 Voltage        | int32  | ×0.1 V   |
-| 0x0002–0x0003 | L1 Current        | int32  | ×0.001 A |
-| 0x0004–0x0005 | L1 Active power   | int32  | ×0.1 W   |
-| 0x0006–0x000D | Reserved          | —      | 0x0000   |
-| 0x000E–0x000F | Energy import total | uint32 | ×0.1 Wh |
-| 0x0010–0x0011 | Energy export total | uint32 | ×0.1 Wh |
+| Address       | Field               | Type   | Scale       |
+|---------------|---------------------|--------|-------------|
+| 0x0000–0x0001 | L1 Voltage          | int32  | ×0.1 V      |
+| 0x0002–0x0003 | L1 Current          | int32  | ×0.001 A    |
+| 0x0004–0x0005 | L1 Active power     | int32  | ×0.1 W      |
+| 0x0006–0x000A | Reserved            | —      | 0x0000      |
+| 0x000B        | Device ID           | uint16 | 120 (ET112) |
+| 0x000C–0x000F | Reserved            | —      | 0x0000      |
+| 0x0010–0x0011 | Energy import total | uint32 | ×0.1 kWh   |
+| 0x0012–0x001F | Reserved            | —      | 0x0000      |
+| 0x0020–0x0021 | Energy export total | uint32 | ×0.1 kWh   |
 
 - Power is signed: positive = importing from grid, negative = exporting
 - Current is always a positive magnitude (direction inferred from power sign)
 - Both FC03 and FC04 are supported (Cerbo GX may use either)
-
-> **Note:** Register addresses are based on the Carlo Gavazzi EM/ET series Modbus documentation. Verify against the official ET112 manual before deploying.
+- Reads beyond address 0x0021 return 0x0000 (no exception), allowing the Cerbo's probe sequence to complete
 
 ## Usage
 

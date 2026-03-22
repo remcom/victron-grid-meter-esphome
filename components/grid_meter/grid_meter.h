@@ -13,7 +13,8 @@ namespace grid_meter {
 
 static const char *const TAG = "grid_meter";
 
-static const uint16_t REG_COUNT        = 18;   // 0x0000-0x0011
+static const uint16_t REG_COUNT        = 34;   // 0x0000-0x0021 (import at 0x0010, export at 0x0020)
+static const uint16_t DEVICE_ID_ET112  = 120;  // Carlo Gavazzi CG identification code for ET112-DIN
 static const uint8_t  MAX_CLIENTS      = 2;
 static const uint16_t MAX_BUF          = 260;
 static const uint32_t CLIENT_TIMEOUT_MS = 10000;
@@ -56,7 +57,7 @@ class GridMeterComponent : public Component {
   uint16_t voltage_shadow_[2]{0, 0};   // high word, low word
   uint16_t current_shadow_[2]{0, 0};
 
-  // Register bank (indices 0-17 = ET112 addresses 0x0000-0x0011)
+  // Register bank (indices 0-33 = ET112 addresses 0x0000-0x0021)
   uint16_t registers_[REG_COUNT]{};
 
   // TCP server
