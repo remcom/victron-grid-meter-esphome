@@ -265,7 +265,26 @@ void GridMeterComponent::handle_frame_(Client &c, uint16_t frame_len) {
     }
     send_response_(c.fd, txid, uid, pdu, (uint8_t)(2 + count * 2));
 
+  } else if (fc == 0x06) {
+    // FC06: Write Single Register — accept as no-op (echo request back)
+    if (frame_len < 12) { send_exception_(c.fd, txid, uid, fc, 0x03); return; }
+    uint16_t addr = (c.buf[8] << 8) | c.buf[9];
+    uint16_t val  = (c.buf[10] << 8) | c.buf[11];
+    ESP_LOGI(TAG, "FC06 write addr=0x%04X val=0x%04X (ignored)", addr, val);
+    uint8_t pdu[5] = { fc, c.buf[8], c.buf[9], c.buf[10], c.buf[11] };
+    send_response_(c.fd, txid, uid, pdu, 5);
+
+  } else if (fc == 0x10) {
+    // FC16: Write Multiple Registers — accept as no-op (echo address + count)
+    if (frame_len < 13) { send_exception_(c.fd, txid, uid, fc, 0x03); return; }
+    uint16_t addr  = (c.buf[8]  << 8) | c.buf[9];
+    uint16_t count = (c.buf[10] << 8) | c.buf[11];
+    ESP_LOGI(TAG, "FC16 write addr=0x%04X count=%u (ignored)", addr, count);
+    uint8_t pdu[5] = { fc, c.buf[8], c.buf[9], c.buf[10], c.buf[11] };
+    send_response_(c.fd, txid, uid, pdu, 5);
+
   } else {
+    ESP_LOGW(TAG, "FC%02X unsupported", fc);
     send_exception_(c.fd, txid, uid, fc, 0x01);  // Illegal Function
   }
 }
