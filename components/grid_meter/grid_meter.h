@@ -13,8 +13,10 @@ namespace grid_meter {
 
 static const char *const TAG = "grid_meter";
 
-static const uint16_t REG_COUNT        = 34;   // 0x0000-0x0021 (import at 0x0010, export at 0x0020)
-static const uint16_t DEVICE_ID_ET112  = 120;  // Carlo Gavazzi CG identification code for ET112-DIN
+// EM24 Ethernet register map (dbus-modbus-client carlo_gavazzi.py, models 1648-1653)
+// All multi-register values are Reg_s32l: little-endian word order (low word at lower address)
+static const uint16_t REG_COUNT        = 80;   // dense array covers 0x0000-0x004F
+static const uint16_t DEVICE_ID_EM24   = 1648; // EM24DINAV23XE1X (only EM24 IDs work over TCP)
 static const uint8_t  MAX_CLIENTS      = 2;
 static const uint16_t MAX_BUF          = 260;
 static const uint32_t CLIENT_TIMEOUT_MS = 10000;
@@ -54,10 +56,11 @@ class GridMeterComponent : public Component {
   sensor::Sensor *energy_export_t2_{nullptr};
 
   // Last known good values for voltage and current (hold-on-NaN)
-  uint16_t voltage_shadow_[2]{0, 0};   // high word, low word
+  // Stored as [low_word, high_word] (little-endian word order, matching Reg_s32l)
+  uint16_t voltage_shadow_[2]{0, 0};
   uint16_t current_shadow_[2]{0, 0};
 
-  // Register bank (indices 0-33 = ET112 addresses 0x0000-0x0021)
+  // Dense register bank covering EM24 addresses 0x0000-0x004F
   uint16_t registers_[REG_COUNT]{};
 
   // TCP server
@@ -73,10 +76,11 @@ class GridMeterComponent : public Component {
   void send_exception_(int fd, uint16_t txid, uint8_t uid, uint8_t fc, uint8_t code);
   void close_client_(Client &c);
 
-  // Write a signed int32 as two big-endian uint16 registers at given index
+  // Sparse register lookup: returns value for any EM24 address, including out-of-dense-range
+  static uint16_t get_register_(const uint16_t *regs, uint16_t addr);
+
+  // Write a signed int32 as two little-endian uint16 registers (Reg_s32l: low word first)
   static void write_int32_(uint16_t *regs, uint8_t idx, int32_t val);
-  // Write an unsigned uint32 as two big-endian uint16 registers at given index
-  static void write_uint32_(uint16_t *regs, uint8_t idx, uint32_t val);
 };
 
 }  // namespace grid_meter
