@@ -28,6 +28,7 @@ uint16_t GridMeterComponent::get_register_(const uint16_t *regs, uint16_t addr) 
   if (addr == 0x0304) return 0x0100;  // FW version 1.0.0
   if (addr == 0x1002) return 3;       // PhaseConfig = 1P (single phase)
   if (addr == 0xa000) return 7;       // Application = H mode
+  if (addr == 0xa100) return 2;       // SwitchPos = '1' (active kWh, both directions)
   return 0;
 }
 
