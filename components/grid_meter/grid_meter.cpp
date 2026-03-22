@@ -157,14 +157,8 @@ void GridMeterComponent::refresh_sensors_() {
     double kwh = (double)ee1 + (double)ee2;
     double raw = kwh * 10.0;
     raw = std::max(0.0, std::min(raw, (double)INT32_MAX));
-    int32_t ee_raw = (int32_t)raw;
-    ESP_LOGI(TAG, "Energy export: %.3f + %.3f = %.3f kWh -> raw=%d reg[0x4E]=0x%04X reg[0x4F]=0x%04X",
-             ee1, ee2, kwh, ee_raw,
-             (uint16_t)((uint32_t)ee_raw & 0xFFFF),
-             (uint16_t)((uint32_t)ee_raw >> 16));
-    write_int32_(registers_, 0x4E, ee_raw);
+    write_int32_(registers_, 0x4E, (int32_t)raw);
   } else {
-    ESP_LOGW(TAG, "Energy export: NaN (ee1=%.3f ee2=%.3f), writing 0", ee1, ee2);
     write_int32_(registers_, 0x4E, 0);
   }
 }
