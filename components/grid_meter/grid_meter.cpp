@@ -246,6 +246,7 @@ void GridMeterComponent::handle_frame_(Client &c, uint16_t frame_len) {
     if (frame_len < 12) { send_exception_(c.fd, txid, uid, fc, 0x03); return; }
     uint16_t start = (c.buf[8]  << 8) | c.buf[9];
     uint16_t count = (c.buf[10] << 8) | c.buf[11];
+    ESP_LOGI(TAG, "FC%02X start=0x%04X count=%u", fc, start, count);
 
     // Bounds check using uint32 to prevent wrap-around on malformed frames
     if ((uint32_t)start + (uint32_t)count > (uint32_t)REG_COUNT) {
