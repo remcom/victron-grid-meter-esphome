@@ -17,7 +17,7 @@ def _load_schema():
         "grid_meter",
         os.path.join(os.path.dirname(__file__), '..', 'components', 'grid_meter', '__init__.py')
     )
-    mod = importlib.util.load_from_spec(spec)
+    mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.CONFIG_SCHEMA
 
