@@ -11,7 +11,7 @@
 namespace esphome {
 namespace grid_meter {
 
-static const char *const TAG = "grid_meter";
+extern const char *const TAG;
 
 // EM24 Ethernet register map (dbus-modbus-client carlo_gavazzi.py, models 1648-1653)
 // All multi-register values are Reg_s32l: little-endian word order (low word at lower address)

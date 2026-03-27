@@ -13,6 +13,8 @@
 namespace esphome {
 namespace grid_meter {
 
+const char *const TAG = "grid_meter";
+
 // ---------- static helpers ----------
 
 // Write signed int32 as two little-endian uint16 registers (Reg_s32l: low word at idx)
@@ -141,7 +143,11 @@ void GridMeterComponent::refresh_sensors_() {
   if (!std::isnan(ei1) && !std::isnan(ei2)) {
     double kwh = (double)ei1 + (double)ei2;
     double raw = kwh * 10.0;
-    raw = std::max(0.0, std::min(raw, (double)INT32_MAX));
+    if (raw > (double)INT32_MAX) {
+      ESP_LOGW(TAG, "Energy import value %.1f kWh exceeds INT32_MAX, clamping", kwh);
+      raw = (double)INT32_MAX;
+    }
+    raw = std::max(0.0, raw);
     int32_t ei_raw = (int32_t)raw;
     write_int32_(registers_, 0x34, ei_raw);
     write_int32_(registers_, 0x40, ei_raw);  // L1 energy forward = total (single phase)
@@ -156,7 +162,11 @@ void GridMeterComponent::refresh_sensors_() {
   if (!std::isnan(ee1) && !std::isnan(ee2)) {
     double kwh = (double)ee1 + (double)ee2;
     double raw = kwh * 10.0;
-    raw = std::max(0.0, std::min(raw, (double)INT32_MAX));
+    if (raw > (double)INT32_MAX) {
+      ESP_LOGW(TAG, "Energy export value %.1f kWh exceeds INT32_MAX, clamping", kwh);
+      raw = (double)INT32_MAX;
+    }
+    raw = std::max(0.0, raw);
     write_int32_(registers_, 0x4E, (int32_t)raw);
   } else {
     write_int32_(registers_, 0x4E, 0);
@@ -168,23 +178,27 @@ void GridMeterComponent::refresh_sensors_() {
 void GridMeterComponent::accept_clients_() {
   struct sockaddr_in client_addr{};
   socklen_t addr_len = sizeof(client_addr);
-  int fd = ::accept(server_fd_, (struct sockaddr *)&client_addr, &addr_len);
-  if (fd < 0) return;  // EAGAIN / EWOULDBLOCK
-
-  for (auto &c : clients_) {
-    if (c.fd < 0) {
-      int flags = ::fcntl(fd, F_GETFL, 0);
-      ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-      c.fd           = fd;
-      c.buf_len      = 0;
-      c.last_recv_ms = millis();
-      ESP_LOGD(TAG, "Client connected (fd=%d)", fd);
-      return;
+  int fd;
+  while ((fd = ::accept(server_fd_, (struct sockaddr *)&client_addr, &addr_len)) >= 0) {
+    bool accepted = false;
+    for (auto &c : clients_) {
+      if (c.fd < 0) {
+        int flags = ::fcntl(fd, F_GETFL, 0);
+        ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        c.fd           = fd;
+        c.buf_len      = 0;
+        c.last_recv_ms = millis();
+        ESP_LOGD(TAG, "Client connected (fd=%d)", fd);
+        accepted = true;
+        break;
+      }
     }
+    if (!accepted) {
+      ESP_LOGW(TAG, "Max clients reached, rejecting connection");
+      ::close(fd);
+    }
+    addr_len = sizeof(client_addr);
   }
-
-  ESP_LOGW(TAG, "Max clients reached, rejecting connection");
-  ::close(fd);
 }
 
 void GridMeterComponent::close_client_(Client &c) {
@@ -228,6 +242,13 @@ void GridMeterComponent::process_client_(Client &c) {
 
     if (proto_id != 0x0000) {
       ESP_LOGD(TAG, "Invalid protocol ID %04X, closing", proto_id);
+      close_client_(c);
+      return;
+    }
+
+    // pdu_length must include at least unit-id + function-code bytes
+    if (pdu_length < 2) {
+      ESP_LOGD(TAG, "PDU length %u too short, closing", pdu_length);
       close_client_(c);
       return;
     }
@@ -310,7 +331,12 @@ void GridMeterComponent::send_response_(int fd, uint16_t txid, uint8_t uid,
   frame[5] = (uint8_t)((1 + pdu_len) & 0xFF);
   frame[6] = uid;
   memcpy(frame + 7, pdu, pdu_len);
-  ::send(fd, frame, 7 + pdu_len, 0);
+  int total = 7 + pdu_len;
+  int sent = ::send(fd, frame, total, 0);
+  if (sent != total) {
+    ESP_LOGW(TAG, "send() short-write (fd=%d, expected=%d, got=%d), closing", fd, total, sent);
+    ::close(fd);
+  }
 }
 
 void GridMeterComponent::send_exception_(int fd, uint16_t txid, uint8_t uid,

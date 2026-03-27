@@ -5,41 +5,28 @@ Requires ESPHome device running p1.yaml + grid_meter flashed and reachable.
 Run: pytest tests/test_grid_meter.py --device-ip=<IP> -v
 """
 import struct
-import pytest
-from pymodbus.client import ModbusTcpClient
-
-
-def pytest_addoption(parser):
-    parser.addoption("--device-ip", default=None, help="ESP32 device IP address")
-
-
-@pytest.fixture(scope="module")
-def client(request):
-    ip = request.config.getoption("--device-ip")
-    if ip is None:
-        pytest.skip("--device-ip not provided")
-    c = ModbusTcpClient(ip, port=502)
-    c.connect()
-    yield c
-    c.close()
 
 
 def read_int32(registers, idx):
-    """Reconstruct signed int32 from two uint16 registers (big-endian, high word first)."""
-    raw = (registers[idx] << 16) | registers[idx + 1]
+    """Reconstruct signed int32 from two uint16 registers using Reg_s32l word order.
+
+    EM24 uses little-endian word order: low word at lower address (idx), high word at idx+1.
+    pymodbus returns registers in address order, so registers[idx] = low word.
+    """
+    raw = (registers[idx + 1] << 16) | registers[idx]
     return struct.unpack(">i", struct.pack(">I", raw))[0]
 
 
 def read_uint32(registers, idx):
-    """Reconstruct uint32 from two uint16 registers (big-endian, high word first)."""
-    return (registers[idx] << 16) | registers[idx + 1]
+    """Reconstruct uint32 from two uint16 registers using Reg_s32l word order."""
+    return (registers[idx + 1] << 16) | registers[idx]
 
 
-def test_fc03_reads_all_18_registers(client):
-    """FC03 reading all 18 registers (0x0000, count=18) must succeed."""
-    rr = client.read_holding_registers(0x0000, 18, slave=1)
+def test_fc03_reads_registers(client):
+    """FC03 reading a block of registers from 0x0000 must succeed."""
+    rr = client.read_holding_registers(0x0000, 20, slave=1)
     assert not rr.isError(), f"FC03 failed: {rr}"
-    assert len(rr.registers) == 18
+    assert len(rr.registers) == 20
 
 
 def test_voltage_is_plausible(client):
@@ -52,8 +39,8 @@ def test_voltage_is_plausible(client):
 
 
 def test_current_is_non_negative(client):
-    """L1 current must be >= 0 (always positive magnitude)."""
-    rr = client.read_holding_registers(0x0002, 2, slave=1)
+    """L1 current must be >= 0 (always positive magnitude). Register 0x000C-0x000D."""
+    rr = client.read_holding_registers(0x000C, 2, slave=1)
     assert not rr.isError()
     raw = read_int32(rr.registers, 0)
     current = raw / 1000.0  # x0.001 A
@@ -61,77 +48,83 @@ def test_current_is_non_negative(client):
 
 
 def test_power_is_signed_int32(client):
-    """Active power register pair must decode as a valid signed int32."""
-    rr = client.read_holding_registers(0x0004, 2, slave=1)
+    """Active power register pair must decode as a valid signed int32. Register 0x0012-0x0013."""
+    rr = client.read_holding_registers(0x0012, 2, slave=1)
     assert not rr.isError()
     power = read_int32(rr.registers, 0) / 10.0
     assert -100000.0 < power < 100000.0, f"Power implausible: {power} W"
 
 
-def test_reserved_registers_are_zero(client):
-    """Registers 0x0006-0x000D (indices 6-13) must be zero."""
-    rr = client.read_holding_registers(0x0006, 8, slave=1)
+def test_model_id_register(client):
+    """Register 0x000B must contain EM24 device ID (1648)."""
+    rr = client.read_holding_registers(0x000B, 1, slave=1)
     assert not rr.isError()
-    assert all(r == 0 for r in rr.registers), \
-        f"Reserved registers non-zero: {rr.registers}"
+    assert rr.registers[0] == 1648, f"Unexpected model ID: {rr.registers[0]}"
 
 
 def test_energy_import_is_non_negative(client):
-    """Energy import total must be >= 0."""
-    rr = client.read_holding_registers(0x000E, 2, slave=1)
+    """Energy import total must be >= 0. Register 0x0034-0x0035."""
+    rr = client.read_holding_registers(0x0034, 2, slave=1)
     assert not rr.isError()
     value = read_uint32(rr.registers, 0)
     assert value >= 0  # uint32 is always >= 0; checks decode works
 
 
 def test_energy_export_is_non_negative(client):
-    """Energy export total must be >= 0."""
-    rr = client.read_holding_registers(0x0010, 2, slave=1)
+    """Energy export total must be >= 0. Register 0x004E-0x004F."""
+    rr = client.read_holding_registers(0x004E, 2, slave=1)
     assert not rr.isError()
     value = read_uint32(rr.registers, 0)
     assert value >= 0
 
 
 def test_fc04_reads_same_as_fc03(client):
-    """FC04 must return the same register values as FC03 (Cerbo may use either)."""
-    rr03 = client.read_holding_registers(0x0000, 18, slave=1)
-    rr04 = client.read_input_registers(0x0000, 18, slave=1)  # pymodbus uses FC04 for input registers
+    """FC04 must return the same stable register values as FC03 (Cerbo may use either).
+
+    Only voltage (0x0000-0x0001) and model ID (0x000B) are compared, since power can
+    legitimately change between the two consecutive reads.
+    """
+    rr03 = client.read_holding_registers(0x0000, 12, slave=1)
+    rr04 = client.read_input_registers(0x0000, 12, slave=1)
     assert not rr03.isError() and not rr04.isError()
-    assert rr03.registers == rr04.registers, \
-        f"FC03 and FC04 returned different values: {rr03.registers} vs {rr04.registers}"
+    # Voltage (regs 0-1) and model ID (reg 11) are stable
+    assert rr03.registers[0:2] == rr04.registers[0:2], \
+        f"Voltage differs between FC03 and FC04: {rr03.registers[0:2]} vs {rr04.registers[0:2]}"
+    assert rr03.registers[11] == rr04.registers[11], \
+        f"Model ID differs between FC03 and FC04: {rr03.registers[11]} vs {rr04.registers[11]}"
 
 
-def test_fc03_out_of_range_returns_exception(client):
-    """FC03 starting at address 18 (one past end) must return exception 0x02."""
-    rr = client.read_holding_registers(18, 1, slave=1)
+def test_fc03_out_of_range_returns_zero(client):
+    """FC03 at address 0x0100 (outside dense range, not in sparse table) must succeed and return 0."""
+    rr = client.read_holding_registers(0x0100, 1, slave=1)
+    assert not rr.isError(), f"FC03 out-of-range unexpectedly failed: {rr}"
+    assert rr.registers[0] == 0, f"Expected 0 for unknown register, got {rr.registers[0]}"
+
+
+def test_fc03_count_zero_returns_exception(client):
+    """FC03 with count=0 must return exception 0x03 (Illegal Data Value)."""
+    rr = client.read_holding_registers(0, 0, slave=1)
     assert rr.isError() or (hasattr(rr, 'function_code') and rr.function_code == 0x83), \
-        "Expected Modbus exception for out-of-range address"
+        "Expected Modbus exception for zero count"
 
 
-def test_fc03_overflow_returns_exception(client):
-    """FC03 with start=0, count=19 (one past end) must return exception 0x02."""
-    rr = client.read_holding_registers(0, 19, slave=1)
-    assert rr.isError() or (hasattr(rr, 'function_code') and rr.function_code == 0x83), \
-        "Expected Modbus exception for overrun count"
-
-
-def test_fc06_write_returns_illegal_function(client):
-    """FC06 write must return exception 0x01 (component is read-only)."""
+def test_fc06_write_accepted_as_noop(client):
+    """FC06 write must succeed as a no-op (component echoes the request, ignores the write)."""
     wr = client.write_register(0x0004, 0, slave=1)
-    assert wr.isError() or (hasattr(wr, 'function_code') and wr.function_code == 0x86), \
-        "Expected Illegal Function exception for write attempt"
+    assert not wr.isError(), f"FC06 unexpectedly returned an error: {wr}"
 
 
 def test_readings_are_stable_between_polls(client):
-    """Reading all registers twice within 1 second should give same voltage and energy."""
+    """Voltage and energy must not change between rapid polls (within 0.5 s)."""
     import time
-    rr1 = client.read_holding_registers(0x0000, 18, slave=1)
+    v1 = client.read_holding_registers(0x0000, 2, slave=1)   # voltage
+    ei1 = client.read_holding_registers(0x0034, 2, slave=1)  # energy import
     time.sleep(0.5)
-    rr2 = client.read_holding_registers(0x0000, 18, slave=1)
-    assert not rr1.isError() and not rr2.isError()
-    # Voltage (regs 0-1) should not change between rapid polls
-    assert rr1.registers[0:2] == rr2.registers[0:2], \
-        f"Voltage changed between polls: {rr1.registers[0:2]} vs {rr2.registers[0:2]}"
-    # Energy (regs 14-17) should not change between rapid polls
-    assert rr1.registers[14:18] == rr2.registers[14:18], \
-        f"Energy changed between polls: {rr1.registers[14:18]} vs {rr2.registers[14:18]}"
+    v2 = client.read_holding_registers(0x0000, 2, slave=1)
+    ei2 = client.read_holding_registers(0x0034, 2, slave=1)
+    assert not v1.isError() and not v2.isError()
+    assert not ei1.isError() and not ei2.isError()
+    assert v1.registers == v2.registers, \
+        f"Voltage changed between polls: {v1.registers} vs {v2.registers}"
+    assert ei1.registers == ei2.registers, \
+        f"Energy import changed between polls: {ei1.registers} vs {ei2.registers}"

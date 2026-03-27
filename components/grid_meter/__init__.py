@@ -3,6 +3,8 @@ import esphome.config_validation as cv
 from esphome.components import sensor
 from esphome.const import CONF_ID
 
+AUTO_LOAD = ["sensor"]
+
 grid_meter_ns = cg.esphome_ns.namespace("grid_meter")
 GridMeterComponent = grid_meter_ns.class_("GridMeterComponent", cg.Component)
 
