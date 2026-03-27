@@ -1,10 +1,14 @@
-# victron-grid-meter-esphome
+# ESPHome Victron Grid Meter — DSMR P1 to Cerbo GX via Modbus TCP
 
-An ESPHome external component that exposes Dutch DSMR P1 smart meter data as a Carlo Gavazzi EM24-compatible Modbus TCP server on port 502, so a Victron Cerbo GX can read it as a single-phase AC grid meter.
+**Turn a Dutch DSMR P1 smart meter into a Victron grid energy meter — no extra hardware required.**
+
+An ESPHome external component that emulates a Carlo Gavazzi EM24 Ethernet energy meter over Modbus TCP (port 502). It bridges Dutch P1 smart meter data (read by an ESP32) to a Victron Cerbo GX, which treats the ESP32 as a real grid energy meter — enabling accurate solar self-consumption tracking, grid feed-in monitoring, and ESS (Energy Storage System) control.
+
+**Keywords:** ESPHome Victron grid meter, DSMR P1 Cerbo GX, ESP32 Modbus TCP grid meter, Carlo Gavazzi EM24 emulator, Victron ESS P1 meter, victron-grid-meter-esphome
 
 ## How it works
 
-The component runs a Modbus TCP server directly on the ESP32. On each loop iteration it reads live sensor values from the ESPHome sensor references (populated by the DSMR P1 component) and writes them into a register array matching the EM24 register map. The Victron Cerbo GX polls this server and treats the device as a grid energy meter.
+The component runs a Modbus TCP server directly on the ESP32. On each loop iteration it reads live sensor values from the ESPHome DSMR P1 component and writes them into a register array matching the EM24 register map. The Victron Cerbo GX polls this server over TCP and treats the ESP32 as a single-phase AC grid energy meter — no RS485 adapter, no USB dongle, no extra devices.
 
 ### Why EM24, not ET112?
 
@@ -46,19 +50,60 @@ external_components:
       type: git
       url: https://github.com/remcom/victron-grid-meter-esphome
       ref: main
-    refresh: 1s
+    refresh: 1h
     components:
       - grid_meter
 
+sensor:
+  - platform: dsmr
+    energy_delivered_tariff1:
+      name: "Energy Consumed Tariff 1"
+      state_class: total_increasing
+      id: energy_delivered_tariff1
+    energy_delivered_tariff2:
+      name: "Energy Consumed Tariff 2"
+      state_class: total_increasing
+      id: energy_delivered_tariff2
+    energy_returned_tariff1:
+      name: "Energy Produced Tariff 1"
+      state_class: total_increasing
+      id: energy_returned_tariff1
+    energy_returned_tariff2:
+      name: "Energy Produced Tariff 2"
+      state_class: total_increasing
+      id: energy_returned_tariff2
+    power_delivered:
+      name: "Power Consumed"
+      id: power_delivered
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - multiply: 1000
+    power_returned:
+      name: "Power Produced"
+      id: power_returned
+      unit_of_measurement: "W"
+      state_class: "measurement"
+      accuracy_decimals: 0
+      filters:
+        - multiply: 1000
+    voltage_l1:
+      name: "Voltage Phase 1"
+      id: voltage_l1
+    current_l1:
+      name: "Current Phase 1"
+      id: current_l1
+
 grid_meter:
-  power_import: power_delivered       # W, sensor ID in your config
-  power_export: power_returned        # W
-  voltage: voltage_l1                 # V
-  current: current_l1                 # A
-  energy_import_t1: energy_delivered_tariff1  # kWh
-  energy_import_t2: energy_delivered_tariff2  # kWh
-  energy_export_t1: energy_returned_tariff1   # kWh
-  energy_export_t2: energy_returned_tariff2   # kWh
+  power_import: power_delivered
+  power_export: power_returned
+  voltage: voltage_l1
+  current: current_l1
+  energy_import_t1: energy_delivered_tariff1
+  energy_import_t2: energy_delivered_tariff2
+  energy_export_t1: energy_returned_tariff1
+  energy_export_t2: energy_returned_tariff2
 ```
 
 All eight sensor keys are required. The sensor IDs must match `id:` fields on sensors already defined in your ESPHome config.
