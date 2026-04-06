@@ -58,7 +58,7 @@ Sparse EM24 registers outside the dense range (`0x0302`, `0x0304`, `0x1002`, `0x
 
 ### Framework requirement
 
-ESP-IDF only (uses POSIX sockets: `socket()`, `bind()`, `listen()`, `accept()`, `recv()`, `send()`, `fcntl()`). Not compatible with the Arduino framework.
+ESP32 only (uses POSIX sockets: `socket()`, `bind()`, `listen()`, `accept()`, `recv()`, `send()`, `fcntl()`). Works with both ESP-IDF and Arduino frameworks on ESP32 (Arduino on ESP32 runs on top of ESP-IDF). Not compatible with ESP8266 or RP2040.
 
 ## ESPHome Coding Standards
 
@@ -70,4 +70,4 @@ Follow https://github.com/esphome/esphome/blob/dev/.ai/instructions.md. Key rule
 - Required + invariant fields → constructor parameters, not setters
 - `dump_config()` must be implemented
 
-**Schema test caveat:** `pytest tests/test_schema.py` will fail `test_valid_config_accepted` if ESPHome `CORE` is not initialised with an ESP-IDF framework context, because `cv.only_with_esp_idf` is part of the schema.
+**Schema test caveat:** `pytest tests/test_schema.py` will fail `test_valid_config_accepted` if ESPHome `CORE` is not initialised with an ESP32 platform context, because `cv.only_on_esp32` is part of the schema.

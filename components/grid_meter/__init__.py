@@ -32,7 +32,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_ENERGY_EXP_T2): cv.use_id(sensor.Sensor),
         }
     ).extend(cv.COMPONENT_SCHEMA),
-    cv.only_with_esp_idf,
+    cv.only_on_esp32,
 )
 
 
