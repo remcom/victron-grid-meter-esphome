@@ -8,52 +8,53 @@
 #include "esphome/core/log.h"
 #include "esphome/components/sensor/sensor.h"
 
-namespace esphome {
-namespace grid_meter {
-
-extern const char *const TAG;
+namespace esphome::grid_meter {
 
 // EM24 Ethernet register map (dbus-modbus-client carlo_gavazzi.py, models 1648-1653)
 // All multi-register values are Reg_s32l: little-endian word order (low word at lower address)
-static const uint16_t REG_COUNT        = 80;   // dense array covers 0x0000-0x004F
-static const uint16_t DEVICE_ID_EM24   = 1648; // EM24DINAV23XE1X (only EM24 IDs work over TCP)
-static const uint8_t  MAX_CLIENTS      = 2;
-static const uint16_t MAX_BUF          = 260;
-static const uint32_t CLIENT_TIMEOUT_MS = 10000;
+static constexpr uint16_t REG_COUNT = 80;           // dense array covers 0x0000-0x004F
+static constexpr uint16_t DEVICE_ID_EM24 = 1648;    // EM24DINAV23XE1X (only EM24 IDs work over TCP)
+static constexpr uint8_t MAX_CLIENTS = 2;
+static constexpr uint16_t MAX_BUF = 260;
+static constexpr uint32_t CLIENT_TIMEOUT_MS = 10000;
 
 struct Client {
-  int      fd{-1};
-  uint8_t  buf[MAX_BUF];
+  int fd{-1};
+  uint8_t buf[MAX_BUF];
   uint16_t buf_len{0};
   uint32_t last_recv_ms{0};
 };
 
 class GridMeterComponent : public Component {
  public:
+  GridMeterComponent(sensor::Sensor *power_import, sensor::Sensor *power_export,
+                     sensor::Sensor *voltage, sensor::Sensor *current,
+                     sensor::Sensor *energy_import_t1, sensor::Sensor *energy_import_t2,
+                     sensor::Sensor *energy_export_t1, sensor::Sensor *energy_export_t2)
+      : power_import_(power_import),
+        power_export_(power_export),
+        voltage_(voltage),
+        current_(current),
+        energy_import_t1_(energy_import_t1),
+        energy_import_t2_(energy_import_t2),
+        energy_export_t1_(energy_export_t1),
+        energy_export_t2_(energy_export_t2) {}
+
   void setup() override;
   void loop() override;
+  void dump_config() override;
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
 
-  // Setters called from __init__.py generated code -- all required
-  void set_power_import(sensor::Sensor *s)     { power_import_ = s; }
-  void set_power_export(sensor::Sensor *s)     { power_export_ = s; }
-  void set_voltage(sensor::Sensor *s)          { voltage_ = s; }
-  void set_current(sensor::Sensor *s)          { current_ = s; }
-  void set_energy_import_t1(sensor::Sensor *s) { energy_import_t1_ = s; }
-  void set_energy_import_t2(sensor::Sensor *s) { energy_import_t2_ = s; }
-  void set_energy_export_t1(sensor::Sensor *s) { energy_export_t1_ = s; }
-  void set_energy_export_t2(sensor::Sensor *s) { energy_export_t2_ = s; }
-
  protected:
-  // Sensors
-  sensor::Sensor *power_import_{nullptr};
-  sensor::Sensor *power_export_{nullptr};
-  sensor::Sensor *voltage_{nullptr};
-  sensor::Sensor *current_{nullptr};
-  sensor::Sensor *energy_import_t1_{nullptr};
-  sensor::Sensor *energy_import_t2_{nullptr};
-  sensor::Sensor *energy_export_t1_{nullptr};
-  sensor::Sensor *energy_export_t2_{nullptr};
+  // Sensors (all required, set via constructor)
+  sensor::Sensor *power_import_;
+  sensor::Sensor *power_export_;
+  sensor::Sensor *voltage_;
+  sensor::Sensor *current_;
+  sensor::Sensor *energy_import_t1_;
+  sensor::Sensor *energy_import_t2_;
+  sensor::Sensor *energy_export_t1_;
+  sensor::Sensor *energy_export_t2_;
 
   // Last known good values for voltage and current (hold-on-NaN)
   // Stored as [low_word, high_word] (little-endian word order, matching Reg_s32l)
@@ -64,7 +65,7 @@ class GridMeterComponent : public Component {
   uint16_t registers_[REG_COUNT]{};
 
   // TCP server
-  int    server_fd_{-1};
+  int server_fd_{-1};
   Client clients_[MAX_CLIENTS];
 
   // Helpers
@@ -83,5 +84,4 @@ class GridMeterComponent : public Component {
   static void write_int32_(uint16_t *regs, uint8_t idx, int32_t val);
 };
 
-}  // namespace grid_meter
-}  // namespace esphome
+}  // namespace esphome::grid_meter
