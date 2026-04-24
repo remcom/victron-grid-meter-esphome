@@ -27,7 +27,7 @@ uint16_t GridMeterComponent::get_register_(const uint16_t *regs, uint16_t addr) 
   if (addr < REG_COUNT) return regs[addr];
   if (addr == 0x0302) return 0x0100;  // HW version 1.0.0
   if (addr == 0x0304) return 0x0100;  // FW version 1.0.0
-  if (addr == 0x1002) return 3;       // PhaseConfig = 1P (single phase)
+  if (addr == 0x1002) return 3;       // PhaseConfig: Victron reads 3 as single-phase emulation (EM24 standard: 3 = 3P, but Cerbo uses total registers regardless)
   if (addr == 0xa000) return 7;       // Application = H mode
   if (addr == 0xa100) return 2;       // SwitchPos = '1' (active kWh, both directions)
   return 0;
@@ -142,6 +142,7 @@ void GridMeterComponent::refresh_sensors_() {
   }
 
   // Energy import total (Reg_s32l, ÷10 kWh) at 0x0034-0x0035 (total) and 0x0040-0x0041 (L1)
+  // Hold last valid value on NaN to prevent transient zeroes corrupting Cerbo energy deltas.
   float ei1 = this->energy_import_t1_->get_state();
   float ei2 = this->energy_import_t2_->get_state();
   if (!std::isnan(ei1) && !std::isnan(ei2)) {
@@ -153,14 +154,16 @@ void GridMeterComponent::refresh_sensors_() {
     }
     raw = std::max(0.0, raw);
     int32_t ei_raw = static_cast<int32_t>(raw);
-    write_int32_(this->registers_, 0x34, ei_raw);
-    write_int32_(this->registers_, 0x40, ei_raw);  // L1 energy forward = total (single phase)
-  } else {
-    write_int32_(this->registers_, 0x34, 0);
-    write_int32_(this->registers_, 0x40, 0);
+    this->energy_import_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(ei_raw) & 0xFFFF);
+    this->energy_import_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(ei_raw) >> 16);
   }
+  this->registers_[0x0034] = this->energy_import_shadow_[0];
+  this->registers_[0x0035] = this->energy_import_shadow_[1];
+  this->registers_[0x0040] = this->energy_import_shadow_[0];  // L1 energy forward = total (single phase)
+  this->registers_[0x0041] = this->energy_import_shadow_[1];
 
   // Energy export total (Reg_s32l, ÷10 kWh) at 0x004E-0x004F
+  // Hold last valid value on NaN to prevent transient zeroes corrupting Cerbo energy deltas.
   float ee1 = this->energy_export_t1_->get_state();
   float ee2 = this->energy_export_t2_->get_state();
   if (!std::isnan(ee1) && !std::isnan(ee2)) {
@@ -171,10 +174,14 @@ void GridMeterComponent::refresh_sensors_() {
       raw = static_cast<double>(INT32_MAX);
     }
     raw = std::max(0.0, raw);
-    write_int32_(this->registers_, 0x4E, static_cast<int32_t>(raw));
-  } else {
-    write_int32_(this->registers_, 0x4E, 0);
+    int32_t ee_raw = static_cast<int32_t>(raw);
+    this->energy_export_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(ee_raw) & 0xFFFF);
+    this->energy_export_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(ee_raw) >> 16);
   }
+  this->registers_[0x004E] = this->energy_export_shadow_[0];
+  this->registers_[0x004F] = this->energy_export_shadow_[1];
+  this->registers_[0x0046] = this->energy_export_shadow_[0];  // L1 energy reverse = total (single phase)
+  this->registers_[0x0047] = this->energy_export_shadow_[1];
 }
 
 // ---------- TCP server ----------
@@ -272,6 +279,8 @@ void GridMeterComponent::process_client_(Client &c) {
       break;  // incomplete frame
 
     this->handle_frame_(c, frame_len);
+    if (c.fd < 0)
+      return;  // handle_frame_ closed the client (send failed)
 
     c.buf_len -= frame_len;
     if (c.buf_len > 0)
@@ -287,7 +296,7 @@ void GridMeterComponent::handle_frame_(Client &c, uint16_t frame_len) {
   if (fc == 0x03 || fc == 0x04) {
     // FC03 / FC04: Read Holding/Input Registers
     if (frame_len < 12) {
-      this->send_exception_(c.fd, txid, uid, fc, 0x03);
+      this->send_exception_(c, txid, uid, fc, 0x03);
       return;
     }
     uint16_t start = (c.buf[8] << 8) | c.buf[9];
@@ -295,7 +304,7 @@ void GridMeterComponent::handle_frame_(Client &c, uint16_t frame_len) {
     ESP_LOGI(TAG, "FC%02X start=0x%04X count=%u", fc, start, count);
 
     if (count == 0 || count > 125) {
-      this->send_exception_(c.fd, txid, uid, fc, 0x03);  // Illegal Data Value
+      this->send_exception_(c, txid, uid, fc, 0x03);  // Illegal Data Value
       return;
     }
 
@@ -309,39 +318,39 @@ void GridMeterComponent::handle_frame_(Client &c, uint16_t frame_len) {
       pdu[2 + i * 2]     = val >> 8;
       pdu[2 + i * 2 + 1] = val & 0xFF;
     }
-    this->send_response_(c.fd, txid, uid, pdu, static_cast<uint8_t>(2 + count * 2));
+    this->send_response_(c, txid, uid, pdu, static_cast<uint8_t>(2 + count * 2));
 
   } else if (fc == 0x06) {
     // FC06: Write Single Register -- accept as no-op (echo request back)
     if (frame_len < 12) {
-      this->send_exception_(c.fd, txid, uid, fc, 0x03);
+      this->send_exception_(c, txid, uid, fc, 0x03);
       return;
     }
     uint16_t addr = (c.buf[8] << 8) | c.buf[9];
     uint16_t val = (c.buf[10] << 8) | c.buf[11];
     ESP_LOGI(TAG, "FC06 write addr=0x%04X val=0x%04X (ignored)", addr, val);
     uint8_t pdu[5] = {fc, c.buf[8], c.buf[9], c.buf[10], c.buf[11]};
-    this->send_response_(c.fd, txid, uid, pdu, 5);
+    this->send_response_(c, txid, uid, pdu, 5);
 
   } else if (fc == 0x10) {
     // FC16: Write Multiple Registers -- accept as no-op (echo address + count)
     if (frame_len < 13) {
-      this->send_exception_(c.fd, txid, uid, fc, 0x03);
+      this->send_exception_(c, txid, uid, fc, 0x03);
       return;
     }
     uint16_t addr = (c.buf[8] << 8) | c.buf[9];
     uint16_t count = (c.buf[10] << 8) | c.buf[11];
     ESP_LOGI(TAG, "FC16 write addr=0x%04X count=%u (ignored)", addr, count);
     uint8_t pdu[5] = {fc, c.buf[8], c.buf[9], c.buf[10], c.buf[11]};
-    this->send_response_(c.fd, txid, uid, pdu, 5);
+    this->send_response_(c, txid, uid, pdu, 5);
 
   } else {
     ESP_LOGW(TAG, "FC%02X unsupported", fc);
-    this->send_exception_(c.fd, txid, uid, fc, 0x01);  // Illegal Function
+    this->send_exception_(c, txid, uid, fc, 0x01);  // Illegal Function
   }
 }
 
-void GridMeterComponent::send_response_(int fd, uint16_t txid, uint8_t uid, const uint8_t *pdu, uint8_t pdu_len) {
+void GridMeterComponent::send_response_(Client &c, uint16_t txid, uint8_t uid, const uint8_t *pdu, uint8_t pdu_len) {
   uint8_t frame[7 + 125 * 2];
   frame[0] = txid >> 8;
   frame[1] = txid & 0xFF;
@@ -352,16 +361,18 @@ void GridMeterComponent::send_response_(int fd, uint16_t txid, uint8_t uid, cons
   frame[6] = uid;
   memcpy(frame + 7, pdu, pdu_len);
   int total = 7 + pdu_len;
-  int sent = ::send(fd, frame, total, 0);
+  int sent = ::send(c.fd, frame, total, 0);
+  if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+    return;
   if (sent != total) {
-    ESP_LOGW(TAG, "send() short-write (fd=%d, expected=%d, got=%d), closing", fd, total, sent);
-    ::close(fd);
+    ESP_LOGW(TAG, "send() short-write (fd=%d, expected=%d, got=%d), closing", c.fd, total, sent);
+    this->close_client_(c);
   }
 }
 
-void GridMeterComponent::send_exception_(int fd, uint16_t txid, uint8_t uid, uint8_t fc, uint8_t code) {
+void GridMeterComponent::send_exception_(Client &c, uint16_t txid, uint8_t uid, uint8_t fc, uint8_t code) {
   uint8_t pdu[2] = {static_cast<uint8_t>(fc | 0x80), code};
-  this->send_response_(fd, txid, uid, pdu, 2);
+  this->send_response_(c, txid, uid, pdu, 2);
 }
 
 }  // namespace esphome::grid_meter
