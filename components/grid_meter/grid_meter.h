@@ -56,10 +56,12 @@ class GridMeterComponent : public Component {
   sensor::Sensor *energy_export_t1_;
   sensor::Sensor *energy_export_t2_;
 
-  // Last known good values for voltage and current (hold-on-NaN)
+  // Last known good values — hold-on-NaN for all measured quantities
   // Stored as [low_word, high_word] (little-endian word order, matching Reg_s32l)
   uint16_t voltage_shadow_[2]{0, 0};
   uint16_t current_shadow_[2]{0, 0};
+  uint16_t energy_import_shadow_[2]{0, 0};
+  uint16_t energy_export_shadow_[2]{0, 0};
 
   // Dense register bank covering EM24 addresses 0x0000-0x004F
   uint16_t registers_[REG_COUNT]{};
@@ -73,8 +75,8 @@ class GridMeterComponent : public Component {
   void accept_clients_();
   void process_client_(Client &c);
   void handle_frame_(Client &c, uint16_t frame_len);
-  void send_response_(int fd, uint16_t txid, uint8_t uid, const uint8_t *pdu, uint8_t pdu_len);
-  void send_exception_(int fd, uint16_t txid, uint8_t uid, uint8_t fc, uint8_t code);
+  void send_response_(Client &c, uint16_t txid, uint8_t uid, const uint8_t *pdu, uint8_t pdu_len);
+  void send_exception_(Client &c, uint16_t txid, uint8_t uid, uint8_t fc, uint8_t code);
   void close_client_(Client &c);
 
   // Sparse register lookup: returns value for any EM24 address, including out-of-dense-range
