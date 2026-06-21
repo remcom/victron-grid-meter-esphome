@@ -164,12 +164,12 @@ void GridMeterComponent::refresh_sensors_() {
     this->current_l3_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
     this->current_l3_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
   }
-  this->registers_l1_[0x000C] = this->current_l1_shadow_[0];
-  this->registers_l1_[0x000D] = this->current_l1_shadow_[1];
-  this->registers_l2_[0x000E] = this->current_l2_shadow_[0];
-  this->registers_l2_[0x000F] = this->current_l2_shadow_[1];
-  this->registers_l3_[0x0010] = this->current_l3_shadow_[0];
-  this->registers_l3_[0x0011] = this->current_l3_shadow_[1];
+  this->registers_[0x000C] = this->current_l1_shadow_[0];
+  this->registers_[0x000D] = this->current_l1_shadow_[1];
+  this->registers_[0x000E] = this->current_l2_shadow_[0];
+  this->registers_[0x000F] = this->current_l2_shadow_[1];
+  this->registers_[0x0010] = this->current_l3_shadow_[0];
+  this->registers_[0x0011] = this->current_l3_shadow_[1];
 
   // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
   // Written to 0x0012-0x0013 (L1 power) and 0x0028-0x0029 (total power — same for single phase)
