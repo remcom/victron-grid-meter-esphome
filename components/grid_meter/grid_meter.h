@@ -28,13 +28,19 @@ struct Client {
 class GridMeterComponent : public Component {
  public:
   GridMeterComponent(sensor::Sensor *power_import, sensor::Sensor *power_export,
-                     sensor::Sensor *voltage, sensor::Sensor *current,
+                     sensor::Sensor *voltage_l1, sensor::Sensor *current_l1,
+                     sensor::Sensor *voltage_l2, sensor::Sensor *current_l2,
+                     sensor::Sensor *voltage_l3, sensor::Sensor *current_l3,
                      sensor::Sensor *energy_import_t1, sensor::Sensor *energy_import_t2,
                      sensor::Sensor *energy_export_t1, sensor::Sensor *energy_export_t2)
       : power_import_(power_import),
         power_export_(power_export),
-        voltage_(voltage),
-        current_(current),
+        voltage_l1_(voltage_l1),
+        current_l1_(current_l1),
+        voltage_l1_(voltage_l2),
+        current_l1_(current_l2),
+        voltage_l1_(voltage_l3),
+        current_l1_(current_l3),
         energy_import_t1_(energy_import_t1),
         energy_import_t2_(energy_import_t2),
         energy_export_t1_(energy_export_t1),
@@ -49,8 +55,12 @@ class GridMeterComponent : public Component {
   // Sensors (all required, set via constructor)
   sensor::Sensor *power_import_;
   sensor::Sensor *power_export_;
-  sensor::Sensor *voltage_;
-  sensor::Sensor *current_;
+  sensor::Sensor *voltage_l1_;
+  sensor::Sensor *current_l1_;
+  sensor::Sensor *voltage_l2_;
+  sensor::Sensor *current_l2_;
+  sensor::Sensor *voltage_l3_;
+  sensor::Sensor *current_l3_;
   sensor::Sensor *energy_import_t1_;
   sensor::Sensor *energy_import_t2_;
   sensor::Sensor *energy_export_t1_;
@@ -58,8 +68,12 @@ class GridMeterComponent : public Component {
 
   // Last known good values for voltage and current (hold-on-NaN)
   // Stored as [low_word, high_word] (little-endian word order, matching Reg_s32l)
-  uint16_t voltage_shadow_[2]{0, 0};
-  uint16_t current_shadow_[2]{0, 0};
+  uint16_t voltage_l1_shadow_[2]{0, 0};
+  uint16_t current_l1_shadow_[2]{0, 0};
+  uint16_t voltage_l2_shadow_[2]{0, 0};
+  uint16_t current_l2_shadow_[2]{0, 0};
+  uint16_t voltage_l3_shadow_[2]{0, 0};
+  uint16_t current_l3_shadow_[2]{0, 0};
 
   // Dense register bank covering EM24 addresses 0x0000-0x004F
   uint16_t registers_[REG_COUNT]{};
