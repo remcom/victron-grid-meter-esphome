@@ -48,7 +48,7 @@ async def to_code(config):
     power_import = await cg.get_variable(config[CONF_POWER_IMPORT])
     power_export = await cg.get_variable(config[CONF_POWER_EXPORT])
     voltage_l1 = await cg.get_variable(config[CONF_VOLTAGE_L1])
-    current_l1 = await cg.get_variable(config[CONF_CURRENTL1])
+    current_l1 = await cg.get_variable(config[CONF_CURRENT_L1])
     voltage_l2 = await cg.get_variable(config[CONF_VOLTAGE_L2])
     current_l2 = await cg.get_variable(config[CONF_CURRENT_L2])
     voltage_l3 = await cg.get_variable(config[CONF_VOLTAGE_L3])
