@@ -112,16 +112,28 @@ void GridMeterComponent::dump_config() {
 
 void GridMeterComponent::refresh_sensors_() {
   // L1 Voltage (Reg_s32l, ÷10 V) at 0x0000-0x0001 -- hold last good on NaN
-  float v = this->voltage_->get_state();
+  float v = this->voltage_l1_->get_state();
   if (!std::isnan(v)) {
     int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
     this->voltage_shadow_l1_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
     this->voltage_shadow_l1_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+  }
+  // L2 Voltage (Reg_s32l, ÷10 V) at 0x0002-0x0003 -- hold last good on NaN
+  v = this->voltage_l2_->get_state();
+  if (!std::isnan(v)) {
+    int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
     this->voltage_shadow_l2_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
     this->voltage_shadow_l2_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+  }
+
+  // L3 Voltage (Reg_s32l, ÷10 V) at 0x0004-0x0005 -- hold last good on NaN
+  v = this->voltage_l3_->get_state();
+  if (!std::isnan(v)) {
+    int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
     this->voltage_shadow_l3_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
     this->voltage_shadow_l3_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
   }
+  
   this->registers_[0x0000] = this->voltage_shadow_l1_[0];
   this->registers_[0x0001] = this->voltage_shadow_l1_[1];
   this->registers_[0x0002] = this->voltage_shadow_l2_[0];
@@ -130,13 +142,25 @@ void GridMeterComponent::refresh_sensors_() {
   this->registers_[0x0005] = this->voltage_shadow_l3_[1];
 
   // L1 Current (Reg_s32l, ÷1000 A) at 0x000C-0x000D -- hold last good on NaN, always positive magnitude
-  float i = this->current_->get_state();
+  float i = this->current_l1_->get_state();
   if (!std::isnan(i)) {
     int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
     this->current_shadow_l1_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
     this->current_shadow_l1_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+  }
+  
+  // L2 Current (Reg_s32l, ÷1000 A) at 0x000E-0x000F -- hold last good on NaN, always positive magnitude
+  i = this->current_l2_->get_state();
+  if (!std::isnan(i)) {
+    int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
     this->current_shadow_l2_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
     this->current_shadow_l2_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+  }
+  
+  // L3 Current (Reg_s32l, ÷1000 A) at 0x0010-0x0011 -- hold last good on NaN, always positive magnitude
+  i = this->current_l3_->get_state();
+  if (!std::isnan(i)) {
+    int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
     this->current_shadow_l3_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
     this->current_shadow_l3_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
   }
