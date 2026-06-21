@@ -96,8 +96,12 @@ void GridMeterComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Grid Meter (EM24 emulation over Modbus TCP):");
   LOG_SENSOR("  ", "Power Import", this->power_import_);
   LOG_SENSOR("  ", "Power Export", this->power_export_);
-  LOG_SENSOR("  ", "Voltage", this->voltage_);
-  LOG_SENSOR("  ", "Current", this->current_);
+  LOG_SENSOR("  ", "Voltage_l1", this->voltage_l1_);
+  LOG_SENSOR("  ", "Current_l1", this->current_l1_);
+  LOG_SENSOR("  ", "Voltage_l2", this->voltage_l2_);
+  LOG_SENSOR("  ", "Current_l2", this->current_l2_);
+  LOG_SENSOR("  ", "Voltage_l3", this->voltage_l3_);
+  LOG_SENSOR("  ", "Current_l3", this->current_l3_);
   LOG_SENSOR("  ", "Energy Import T1", this->energy_import_t1_);
   LOG_SENSOR("  ", "Energy Import T2", this->energy_import_t2_);
   LOG_SENSOR("  ", "Energy Export T1", this->energy_export_t1_);
@@ -111,21 +115,37 @@ void GridMeterComponent::refresh_sensors_() {
   float v = this->voltage_->get_state();
   if (!std::isnan(v)) {
     int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
-    this->voltage_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
-    this->voltage_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+    this->voltage_shadow_l1_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
+    this->voltage_shadow_l1_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+    this->voltage_shadow_l2_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
+    this->voltage_shadow_l2_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+    this->voltage_shadow_l3_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
+    this->voltage_shadow_l3_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
   }
-  this->registers_[0x0000] = this->voltage_shadow_[0];
-  this->registers_[0x0001] = this->voltage_shadow_[1];
+  this->registers_[0x0000] = this->voltage_shadow_l1_[0];
+  this->registers_[0x0001] = this->voltage_shadow_l1_[1];
+  this->registers_[0x0002] = this->voltage_shadow_l2_[0];
+  this->registers_[0x0003] = this->voltage_shadow_l2_[1];
+  this->registers_[0x0004] = this->voltage_shadow_l3_[0];
+  this->registers_[0x0005] = this->voltage_shadow_l3_[1];
 
   // L1 Current (Reg_s32l, ÷1000 A) at 0x000C-0x000D -- hold last good on NaN, always positive magnitude
   float i = this->current_->get_state();
   if (!std::isnan(i)) {
     int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
-    this->current_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
-    this->current_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+    this->current_shadow_l1_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
+    this->current_shadow_l1_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+    this->current_shadow_l2_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
+    this->current_shadow_l2_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+    this->current_shadow_l3_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
+    this->current_shadow_l3_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
   }
-  this->registers_[0x000C] = this->current_shadow_[0];
-  this->registers_[0x000D] = this->current_shadow_[1];
+  this->registers_l1_[0x000C] = this->current_shadow_l1_[0];
+  this->registers_l1_[0x000D] = this->current_shadow_l1_[1];
+  this->registers_l2_[0x000E] = this->current_shadow_l2_[0];
+  this->registers_l2_[0x000F] = this->current_shadow_l2_[1];
+  this->registers_l3_[0x0010] = this->current_shadow_l3_[0];
+  this->registers_l3_[0x0011] = this->current_shadow_l3_[1];
 
   // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
   // Written to 0x0012-0x0013 (L1 power) and 0x0028-0x0029 (total power — same for single phase)
