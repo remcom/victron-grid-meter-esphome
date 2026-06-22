@@ -94,14 +94,18 @@ void GridMeterComponent::loop() {
 
 void GridMeterComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Grid Meter (EM24 emulation over Modbus TCP):");
-  LOG_SENSOR("  ", "Power Import", this->power_import_);
-  LOG_SENSOR("  ", "Power Export", this->power_export_);
-  LOG_SENSOR("  ", "Voltage_l1", this->voltage_l1_);
-  LOG_SENSOR("  ", "Current_l1", this->current_l1_);
-  LOG_SENSOR("  ", "Voltage_l2", this->voltage_l2_);
-  LOG_SENSOR("  ", "Current_l2", this->current_l2_);
-  LOG_SENSOR("  ", "Voltage_l3", this->voltage_l3_);
-  LOG_SENSOR("  ", "Current_l3", this->current_l3_);
+  LOG_SENSOR("  ", "Power l1 Import", this->power_l1_import_);
+  LOG_SENSOR("  ", "Power l1 Export", this->power_l1_export_);
+  LOG_SENSOR("  ", "Power l2 Import", this->power_l2_import_);
+  LOG_SENSOR("  ", "Power l2 Export", this->power_l2_export_);
+  LOG_SENSOR("  ", "Power l3 Import", this->power_l3_import_);
+  LOG_SENSOR("  ", "Power l3 Export", this->power_l3_export_);
+  LOG_SENSOR("  ", "Voltage l1", this->voltage_l1_);
+  LOG_SENSOR("  ", "Current l1", this->current_l1_);
+  LOG_SENSOR("  ", "Voltage l2", this->voltage_l2_);
+  LOG_SENSOR("  ", "Current l2", this->current_l2_);
+  LOG_SENSOR("  ", "Voltage l3", this->voltage_l3_);
+  LOG_SENSOR("  ", "Current l3", this->current_l3_);
   LOG_SENSOR("  ", "Energy Import T1", this->energy_import_t1_);
   LOG_SENSOR("  ", "Energy Import T2", this->energy_import_t2_);
   LOG_SENSOR("  ", "Energy Export T1", this->energy_export_t1_);
@@ -173,18 +177,47 @@ void GridMeterComponent::refresh_sensors_() {
 
   // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
   // Written to 0x0012-0x0013 (L1 power) and 0x0028-0x0029 (total power — same for single phase)
-  float imp = this->power_import_->get_state();
-  float exp_pwr = this->power_export_->get_state();
+  float imp = this->power_l1_import_->get_state();
+  float exp_pwr = this->power_l1_export_->get_state();
+  float pwr_total;
   if (!std::isnan(imp) && !std::isnan(exp_pwr)) {
     float net = imp - exp_pwr;
     int32_t pwr_raw = static_cast<int32_t>(net * 10.0f + (net >= 0 ? 0.5f : -0.5f));
     write_int32_(this->registers_, 0x12, pwr_raw);
-    write_int32_(this->registers_, 0x28, pwr_raw);
+    pwr_total = pwr_total + pwr_raw;
   } else {
     write_int32_(this->registers_, 0x12, 0);
-    write_int32_(this->registers_, 0x28, 0);
   }
 
+  // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
+  // Written to 0x0014-0x0015 (L2 power)
+  imp = this->power_l2_import_->get_state();
+  exp_pwr = this->power_l2_export_->get_state();
+  if (!std::isnan(imp) && !std::isnan(exp_pwr)) {
+    float net = imp - exp_pwr;
+    int32_t pwr_raw = static_cast<int32_t>(net * 10.0f + (net >= 0 ? 0.5f : -0.5f));
+    write_int32_(this->registers_, 0x14, pwr_raw);
+    pwr_total = pwr_total + pwr_raw;
+  } else {
+    write_int32_(this->registers_, 0x14, 0);
+  }
+
+  // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
+  // Written to 0x0016-0x0017 (L3 power)
+  imp = this->power_l3_import_->get_state();
+  exp_pwr = this->power_l3_export_->get_state();
+  if (!std::isnan(imp) && !std::isnan(exp_pwr)) {
+    float net = imp - exp_pwr;
+    int32_t pwr_raw = static_cast<int32_t>(net * 10.0f + (net >= 0 ? 0.5f : -0.5f));
+    write_int32_(this->registers_, 0x16, pwr_raw);
+    pwr_total = pwr_total + pwr_raw;
+  } else {
+    write_int32_(this->registers_, 0x16, 0);
+  }
+
+  // write total power to registers 0x0028-0x0029
+  write_int32_(this->registers_, 0x28, pwr_total);
+  
   // Energy import total (Reg_s32l, ÷10 kWh) at 0x0034-0x0035 (total) and 0x0040-0x0041 (L1)
   float ei1 = this->energy_import_t1_->get_state();
   float ei2 = this->energy_import_t2_->get_state();
