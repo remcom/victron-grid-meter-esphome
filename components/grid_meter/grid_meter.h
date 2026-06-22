@@ -52,7 +52,9 @@ class GridMeterComponent : public Component {
         energy_import_t1_(energy_import_t1),
         energy_import_t2_(energy_import_t2),
         energy_export_t1_(energy_export_t1),
-        energy_export_t2_(energy_export_t2) {}
+        energy_export_t2_(energy_export_t2) {
+          PHASE_CONFIG = phase_config;
+        }
 
   void setup() override;
   void loop() override;
