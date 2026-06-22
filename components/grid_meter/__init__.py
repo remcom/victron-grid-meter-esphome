@@ -71,8 +71,12 @@ async def to_code(config):
     energy_export_t2 = await cg.get_variable(config[CONF_ENERGY_EXP_T2])
     var = cg.new_Pvariable(
         config[CONF_ID],
-        power_import,
-        power_export,
+        power_l1_import,
+        power_l1_export,
+        power_l2_import,
+        power_l2_export,
+        power_l3_import,
+        power_l3_export,
         voltage_l1,
         current_l1,
         voltage_l2,
