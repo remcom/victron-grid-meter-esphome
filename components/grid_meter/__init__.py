@@ -9,7 +9,7 @@ CODEOWNERS = []
 grid_meter_ns = cg.esphome_ns.namespace("grid_meter")
 GridMeterComponent = grid_meter_ns.class_("GridMeterComponent", cg.Component)
 
-CONF_POWER_L!_IMPORT = "power_l1_import"
+CONF_POWER_L1_IMPORT = "power_l1_import"
 CONF_POWER_L1_EXPORT = "power_l1_export"
 CONF_POWER_L2_IMPORT = "power_l2_import"
 CONF_POWER_L2_EXPORT = "power_l2_export"
