@@ -25,6 +25,7 @@ CONF_ENERGY_IMP_T1 = "energy_import_t1"
 CONF_ENERGY_IMP_T2 = "energy_import_t2"
 CONF_ENERGY_EXP_T1 = "energy_export_t1"
 CONF_ENERGY_EXP_T2 = "energy_export_t2"
+CONF_PHASE_CONFIG = "phase_config"  # Add new configuration constant
 
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
@@ -46,6 +47,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_ENERGY_IMP_T2): cv.use_id(sensor.Sensor),
             cv.Required(CONF_ENERGY_EXP_T1): cv.use_id(sensor.Sensor),
             cv.Required(CONF_ENERGY_EXP_T2): cv.use_id(sensor.Sensor),
+            cv.Optional(CONF_PHASE_CONFIG): cv.use_id(sensor.Sensor),  # Add optional phase_config sensor
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.only_on_esp32,
@@ -69,6 +71,12 @@ async def to_code(config):
     energy_import_t2 = await cg.get_variable(config[CONF_ENERGY_IMP_T2])
     energy_export_t1 = await cg.get_variable(config[CONF_ENERGY_EXP_T1])
     energy_export_t2 = await cg.get_variable(config[CONF_ENERGY_EXP_T2])
+
+    # Get phase_config sensor if provided, otherwise None
+    phase_config = None
+    if CONF_PHASE_CONFIG in config:
+        phase_config = await cg.get_variable(config[CONF_PHASE_CONFIG])
+        
     var = cg.new_Pvariable(
         config[CONF_ID],
         power_l1_import,
@@ -87,5 +95,6 @@ async def to_code(config):
         energy_import_t2,
         energy_export_t1,
         energy_export_t2,
+        phase_config,  # Pass the new sensor to the constructor
     )
     await cg.register_component(var, config)
