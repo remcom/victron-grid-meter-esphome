@@ -17,7 +17,6 @@ static constexpr uint16_t DEVICE_ID_EM24 = 1648;    // EM24DINAV23XE1X (only EM2
 static constexpr uint8_t MAX_CLIENTS = 2;
 static constexpr uint16_t MAX_BUF = 260;
 static constexpr uint32_t CLIENT_TIMEOUT_MS = 10000;
-uint8_t PHASE_CONFIG; 
 
 struct Client {
   int fd{-1};
@@ -53,7 +52,7 @@ class GridMeterComponent : public Component {
         energy_import_t2_(energy_import_t2),
         energy_export_t1_(energy_export_t1),
         energy_export_t2_(energy_export_t2) {
-          PHASE_CONFIG = phase_config;
+          PHASE_CONFIG_ = phase_config;
         }
 
   void setup() override;
@@ -79,7 +78,7 @@ class GridMeterComponent : public Component {
   sensor::Sensor *energy_import_t2_;
   sensor::Sensor *energy_export_t1_;
   sensor::Sensor *energy_export_t2_;
-
+ 
   // Last known good values for voltage and current (hold-on-NaN)
   // Stored as [low_word, high_word] (little-endian word order, matching Reg_s32l)
   uint16_t voltage_l1_shadow_[2]{0, 0};
@@ -91,6 +90,9 @@ class GridMeterComponent : public Component {
 
   // Dense register bank covering EM24 addresses 0x0000-0x004F
   uint16_t registers_[REG_COUNT]{};
+
+  // protected member to store the phase config: 0 = 3P.n (three-phase), 3 = 1P (single-phase)
+  uint8_t PHASE_CONFIG_;
 
   // TCP server
   int server_fd_{-1};
