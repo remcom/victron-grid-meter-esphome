@@ -82,7 +82,7 @@ async def to_code(config):
     energy_export_t2 = await cg.get_variable(config[CONF_ENERGY_EXP_T2])
 
     # Get the integer configuration value (validated to be 0 or 3)
-    phase_config = config[CONF_PHASE_CONFIG])
+    phase_config = config[CONF_PHASE_CONFIG]
         
     var = cg.new_Pvariable(
         config[CONF_ID],
