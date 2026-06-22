@@ -13,6 +13,7 @@
 namespace esphome::grid_meter {
 
 static const char *const TAG = "grid_meter";
+uint16_t GridMeterComponent::PHASE_CONFIG = 0;  // Initialize with a default value
 
 // ---------- static helpers ----------
 
