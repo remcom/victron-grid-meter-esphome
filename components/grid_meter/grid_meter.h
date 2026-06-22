@@ -111,7 +111,7 @@ class GridMeterComponent : public Component {
   static void write_int32_(uint16_t *regs, uint8_t idx, int32_t val);
 
   // static member to store the phase config: 0 = 3P.n (three-phase), 3 = 1P (single-phase)
-  static uint8_t PHASE_CONFIG;
+  static uint16_t PHASE_CONFIG;
 
 };
 
