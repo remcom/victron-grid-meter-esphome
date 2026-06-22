@@ -17,6 +17,7 @@ static constexpr uint16_t DEVICE_ID_EM24 = 1648;    // EM24DINAV23XE1X (only EM2
 static constexpr uint8_t MAX_CLIENTS = 2;
 static constexpr uint16_t MAX_BUF = 260;
 static constexpr uint32_t CLIENT_TIMEOUT_MS = 10000;
+uint8_t PHASE_CONFIG = 3; 
 
 struct Client {
   int fd{-1};
@@ -34,7 +35,8 @@ class GridMeterComponent : public Component {
                      sensor::Sensor *voltage_l2, sensor::Sensor *current_l2,
                      sensor::Sensor *voltage_l3, sensor::Sensor *current_l3,
                      sensor::Sensor *energy_import_t1, sensor::Sensor *energy_import_t2,
-                     sensor::Sensor *energy_export_t1, sensor::Sensor *energy_export_t2)
+                     sensor::Sensor *energy_export_t1, sensor::Sensor *energy_export_t2,
+                     uint8_t phase_config)
       : power_l1_import_(power_l1_import),
         power_l1_export_(power_l1_export),
         power_l2_import_(power_l2_import),
