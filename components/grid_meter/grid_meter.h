@@ -91,9 +91,6 @@ class GridMeterComponent : public Component {
   // Dense register bank covering EM24 addresses 0x0000-0x004F
   uint16_t registers_[REG_COUNT]{};
 
-  // protected member to store the phase config: 0 = 3P.n (three-phase), 3 = 1P (single-phase)
-  uint8_t PHASE_CONFIG_;
-
   // TCP server
   int server_fd_{-1};
   Client clients_[MAX_CLIENTS];
@@ -112,6 +109,10 @@ class GridMeterComponent : public Component {
 
   // Write a signed int32 as two little-endian uint16 registers (Reg_s32l: low word first)
   static void write_int32_(uint16_t *regs, uint8_t idx, int32_t val);
+
+  // static member to store the phase config: 0 = 3P.n (three-phase), 3 = 1P (single-phase)
+  static uint8_t PHASE_CONFIG_;
+
 };
 
 }  // namespace esphome::grid_meter
