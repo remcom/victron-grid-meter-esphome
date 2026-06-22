@@ -27,6 +27,15 @@ CONF_ENERGY_EXP_T1 = "energy_export_t1"
 CONF_ENERGY_EXP_T2 = "energy_export_t2"
 CONF_PHASE_CONFIG = "phase_config"  # Add new configuration constant
 
+# Define valid values for phase_config
+PHASE_CONFIG_VALUES = [0, 3]
+
+def validate_phase_config(value):
+    """Validate that phase_config is either 0 or 3."""
+    if value not in PHASE_CONFIG_VALUES:
+        raise cv.Invalid(f"phase_config must be one of {PHASE_CONFIG_VALUES}")
+    return value
+
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
@@ -47,7 +56,7 @@ CONFIG_SCHEMA = cv.All(
             cv.Required(CONF_ENERGY_IMP_T2): cv.use_id(sensor.Sensor),
             cv.Required(CONF_ENERGY_EXP_T1): cv.use_id(sensor.Sensor),
             cv.Required(CONF_ENERGY_EXP_T2): cv.use_id(sensor.Sensor),
-            cv.Optional(CONF_PHASE_CONFIG): cv.use_id(sensor.Sensor),  # Add optional phase_config sensor
+            cv.Optional(CONF_PHASE_CONFIG, default=0): validate_phase_config,
         }
     ).extend(cv.COMPONENT_SCHEMA),
     cv.only_on_esp32,
@@ -72,10 +81,8 @@ async def to_code(config):
     energy_export_t1 = await cg.get_variable(config[CONF_ENERGY_EXP_T1])
     energy_export_t2 = await cg.get_variable(config[CONF_ENERGY_EXP_T2])
 
-    # Get phase_config sensor if provided, otherwise None
-    phase_config = None
-    if CONF_PHASE_CONFIG in config:
-        phase_config = await cg.get_variable(config[CONF_PHASE_CONFIG])
+    # Get the integer configuration value (validated to be 0 or 3)
+    phase_config = config[CONF_PHASE_CONFIG]IG])
         
     var = cg.new_Pvariable(
         config[CONF_ID],
@@ -95,6 +102,6 @@ async def to_code(config):
         energy_import_t2,
         energy_export_t1,
         energy_export_t2,
-        phase_config,  # Pass the new sensor to the constructor
+        phase_config,  # Pass the new integer value to the constructor
     )
     await cg.register_component(var, config)
