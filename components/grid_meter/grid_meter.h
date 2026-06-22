@@ -17,7 +17,7 @@ static constexpr uint16_t DEVICE_ID_EM24 = 1648;    // EM24DINAV23XE1X (only EM2
 static constexpr uint8_t MAX_CLIENTS = 2;
 static constexpr uint16_t MAX_BUF = 260;
 static constexpr uint32_t CLIENT_TIMEOUT_MS = 10000;
-uint8_t PHASE_CONFIG = 3; 
+uint8_t PHASE_CONFIG; 
 
 struct Client {
   int fd{-1};
