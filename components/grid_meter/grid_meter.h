@@ -52,7 +52,7 @@ class GridMeterComponent : public Component {
         energy_import_t2_(energy_import_t2),
         energy_export_t1_(energy_export_t1),
         energy_export_t2_(energy_export_t2) {
-          PHASE_CONFIG_ = phase_config;
+          PHASE_CONFIG = phase_config;
         }
 
   void setup() override;
@@ -111,7 +111,7 @@ class GridMeterComponent : public Component {
   static void write_int32_(uint16_t *regs, uint8_t idx, int32_t val);
 
   // static member to store the phase config: 0 = 3P.n (three-phase), 3 = 1P (single-phase)
-  static uint8_t PHASE_CONFIG_;
+  static uint8_t PHASE_CONFIG;
 
 };
 
