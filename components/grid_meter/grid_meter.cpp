@@ -27,7 +27,7 @@ uint16_t GridMeterComponent::get_register_(const uint16_t *regs, uint16_t addr) 
   if (addr < REG_COUNT) return regs[addr];
   if (addr == 0x0302) return 0x0100;  // HW version 1.0.0
   if (addr == 0x0304) return 0x0100;  // FW version 1.0.0
-  if (addr == 0x1002) return 3;       // PhaseConfig = 1P (single phase)
+  if (addr == 0x1002) return PHASE_CONFIG_;       // PhaseConfig = 3 =1P (single phase), PhaseConfig = 0 = 3P.n (three-phase),
   if (addr == 0xa000) return 7;       // Application = H mode
   if (addr == 0xa100) return 2;       // SwitchPos = '1' (active kWh, both directions)
   return 0;
@@ -94,10 +94,18 @@ void GridMeterComponent::loop() {
 
 void GridMeterComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "Grid Meter (EM24 emulation over Modbus TCP):");
-  LOG_SENSOR("  ", "Power Import", this->power_import_);
-  LOG_SENSOR("  ", "Power Export", this->power_export_);
-  LOG_SENSOR("  ", "Voltage", this->voltage_);
-  LOG_SENSOR("  ", "Current", this->current_);
+  LOG_SENSOR("  ", "Power l1 Import", this->power_l1_import_);
+  LOG_SENSOR("  ", "Power l1 Export", this->power_l1_export_);
+  LOG_SENSOR("  ", "Power l2 Import", this->power_l2_import_);
+  LOG_SENSOR("  ", "Power l2 Export", this->power_l2_export_);
+  LOG_SENSOR("  ", "Power l3 Import", this->power_l3_import_);
+  LOG_SENSOR("  ", "Power l3 Export", this->power_l3_export_);
+  LOG_SENSOR("  ", "Voltage l1", this->voltage_l1_);
+  LOG_SENSOR("  ", "Current l1", this->current_l1_);
+  LOG_SENSOR("  ", "Voltage l2", this->voltage_l2_);
+  LOG_SENSOR("  ", "Current l2", this->current_l2_);
+  LOG_SENSOR("  ", "Voltage l3", this->voltage_l3_);
+  LOG_SENSOR("  ", "Current l3", this->current_l3_);
   LOG_SENSOR("  ", "Energy Import T1", this->energy_import_t1_);
   LOG_SENSOR("  ", "Energy Import T2", this->energy_import_t2_);
   LOG_SENSOR("  ", "Energy Export T1", this->energy_export_t1_);
@@ -108,39 +116,108 @@ void GridMeterComponent::dump_config() {
 
 void GridMeterComponent::refresh_sensors_() {
   // L1 Voltage (Reg_s32l, ÷10 V) at 0x0000-0x0001 -- hold last good on NaN
-  float v = this->voltage_->get_state();
+  float v = this->voltage_l1_->get_state();
   if (!std::isnan(v)) {
     int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
-    this->voltage_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
-    this->voltage_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+    this->voltage_l1_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
+    this->voltage_l1_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
   }
-  this->registers_[0x0000] = this->voltage_shadow_[0];
-  this->registers_[0x0001] = this->voltage_shadow_[1];
+  // L2 Voltage (Reg_s32l, ÷10 V) at 0x0002-0x0003 -- hold last good on NaN
+  v = this->voltage_l2_->get_state();
+  if (!std::isnan(v)) {
+    int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
+    this->voltage_l2_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
+    this->voltage_l2_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+  }
+
+  // L3 Voltage (Reg_s32l, ÷10 V) at 0x0004-0x0005 -- hold last good on NaN
+  v = this->voltage_l3_->get_state();
+  if (!std::isnan(v)) {
+    int32_t v_raw = static_cast<int32_t>(v * 10.0f + 0.5f);
+    this->voltage_l3_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) & 0xFFFF);  // low word
+    this->voltage_l3_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(v_raw) >> 16);     // high word
+  }
+  
+  this->registers_[0x0000] = this->voltage_l1_shadow_[0];
+  this->registers_[0x0001] = this->voltage_l1_shadow_[1];
+  this->registers_[0x0002] = this->voltage_l2_shadow_[0];
+  this->registers_[0x0003] = this->voltage_l2_shadow_[1];
+  this->registers_[0x0004] = this->voltage_l3_shadow_[0];
+  this->registers_[0x0005] = this->voltage_l3_shadow_[1];
 
   // L1 Current (Reg_s32l, ÷1000 A) at 0x000C-0x000D -- hold last good on NaN, always positive magnitude
-  float i = this->current_->get_state();
+  float i = this->current_l1_->get_state();
   if (!std::isnan(i)) {
     int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
-    this->current_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
-    this->current_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+    this->current_l1_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
+    this->current_l1_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
   }
-  this->registers_[0x000C] = this->current_shadow_[0];
-  this->registers_[0x000D] = this->current_shadow_[1];
+  
+  // L2 Current (Reg_s32l, ÷1000 A) at 0x000E-0x000F -- hold last good on NaN, always positive magnitude
+  i = this->current_l2_->get_state();
+  if (!std::isnan(i)) {
+    int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
+    this->current_l2_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
+    this->current_l2_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+  }
+  
+  // L3 Current (Reg_s32l, ÷1000 A) at 0x0010-0x0011 -- hold last good on NaN, always positive magnitude
+  i = this->current_l3_->get_state();
+  if (!std::isnan(i)) {
+    int32_t i_raw = static_cast<int32_t>(std::abs(i) * 1000.0f + 0.5f);
+    this->current_l3_shadow_[0] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) & 0xFFFF);  // low word
+    this->current_l3_shadow_[1] = static_cast<uint16_t>(static_cast<uint32_t>(i_raw) >> 16);     // high word
+  }
+  this->registers_[0x000C] = this->current_l1_shadow_[0];
+  this->registers_[0x000D] = this->current_l1_shadow_[1];
+  this->registers_[0x000E] = this->current_l2_shadow_[0];
+  this->registers_[0x000F] = this->current_l2_shadow_[1];
+  this->registers_[0x0010] = this->current_l3_shadow_[0];
+  this->registers_[0x0011] = this->current_l3_shadow_[1];
 
   // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
   // Written to 0x0012-0x0013 (L1 power) and 0x0028-0x0029 (total power — same for single phase)
-  float imp = this->power_import_->get_state();
-  float exp_pwr = this->power_export_->get_state();
+  float imp = this->power_l1_import_->get_state();
+  float exp_pwr = this->power_l1_export_->get_state();
+  float pwr_total;
   if (!std::isnan(imp) && !std::isnan(exp_pwr)) {
     float net = imp - exp_pwr;
     int32_t pwr_raw = static_cast<int32_t>(net * 10.0f + (net >= 0 ? 0.5f : -0.5f));
     write_int32_(this->registers_, 0x12, pwr_raw);
-    write_int32_(this->registers_, 0x28, pwr_raw);
+    pwr_total = pwr_total + pwr_raw;
   } else {
     write_int32_(this->registers_, 0x12, 0);
-    write_int32_(this->registers_, 0x28, 0);
   }
 
+  // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
+  // Written to 0x0014-0x0015 (L2 power)
+  imp = this->power_l2_import_->get_state();
+  exp_pwr = this->power_l2_export_->get_state();
+  if (!std::isnan(imp) && !std::isnan(exp_pwr)) {
+    float net = imp - exp_pwr;
+    int32_t pwr_raw = static_cast<int32_t>(net * 10.0f + (net >= 0 ? 0.5f : -0.5f));
+    write_int32_(this->registers_, 0x14, pwr_raw);
+    pwr_total = pwr_total + pwr_raw;
+  } else {
+    write_int32_(this->registers_, 0x14, 0);
+  }
+
+  // Net power (Reg_s32l, ÷10 W) -- positive = import, negative = export; zero on NaN
+  // Written to 0x0016-0x0017 (L3 power)
+  imp = this->power_l3_import_->get_state();
+  exp_pwr = this->power_l3_export_->get_state();
+  if (!std::isnan(imp) && !std::isnan(exp_pwr)) {
+    float net = imp - exp_pwr;
+    int32_t pwr_raw = static_cast<int32_t>(net * 10.0f + (net >= 0 ? 0.5f : -0.5f));
+    write_int32_(this->registers_, 0x16, pwr_raw);
+    pwr_total = pwr_total + pwr_raw;
+  } else {
+    write_int32_(this->registers_, 0x16, 0);
+  }
+
+  // write total power to registers 0x0028-0x0029
+  write_int32_(this->registers_, 0x28, pwr_total);
+  
   // Energy import total (Reg_s32l, ÷10 kWh) at 0x0034-0x0035 (total) and 0x0040-0x0041 (L1)
   float ei1 = this->energy_import_t1_->get_state();
   float ei2 = this->energy_import_t2_->get_state();
