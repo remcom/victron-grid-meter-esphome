@@ -9,8 +9,12 @@ CODEOWNERS = []
 grid_meter_ns = cg.esphome_ns.namespace("grid_meter")
 GridMeterComponent = grid_meter_ns.class_("GridMeterComponent", cg.Component)
 
-CONF_POWER_IMPORT = "power_import"
-CONF_POWER_EXPORT = "power_export"
+CONF_POWER_L!_IMPORT = "power_l1_import"
+CONF_POWER_L1_EXPORT = "power_l1_export"
+CONF_POWER_L2_IMPORT = "power_l2_import"
+CONF_POWER_L2_EXPORT = "power_l2_export"
+CONF_POWER_L3_IMPORT = "power_l3_import"
+CONF_POWER_L3_EXPORT = "power_l3_export"
 CONF_VOLTAGE_L1 = "voltage_l1"
 CONF_CURRENT_L1 = "current_l1"
 CONF_VOLTAGE_L2 = "voltage_l2"
@@ -26,8 +30,12 @@ CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(GridMeterComponent),
-            cv.Required(CONF_POWER_IMPORT): cv.use_id(sensor.Sensor),
-            cv.Required(CONF_POWER_EXPORT): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_POWER_L1_IMPORT): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_POWER_L1_EXPORT): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_POWER_L2_IMPORT): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_POWER_L2_EXPORT): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_POWER_L3_IMPORT): cv.use_id(sensor.Sensor),
+            cv.Required(CONF_POWER_L3_EXPORT): cv.use_id(sensor.Sensor),
             cv.Required(CONF_VOLTAGE_L1): cv.use_id(sensor.Sensor),
             cv.Required(CONF_CURRENT_L1): cv.use_id(sensor.Sensor),
             cv.Required(CONF_VOLTAGE_L2): cv.use_id(sensor.Sensor),
@@ -45,8 +53,12 @@ CONFIG_SCHEMA = cv.All(
 
 
 async def to_code(config):
-    power_import = await cg.get_variable(config[CONF_POWER_IMPORT])
-    power_export = await cg.get_variable(config[CONF_POWER_EXPORT])
+    power_l1_import = await cg.get_variable(config[CONF_POWER_L1_IMPORT])
+    power_l1_export = await cg.get_variable(config[CONF_POWER_L1_EXPORT])
+    power_l2_import = await cg.get_variable(config[CONF_POWER_L2_IMPORT])
+    power_l2_export = await cg.get_variable(config[CONF_POWER_L2_EXPORT])
+    power_l3_import = await cg.get_variable(config[CONF_POWER_L3_IMPORT])
+    power_l3_export = await cg.get_variable(config[CONF_POWER_L3_EXPORT])
     voltage_l1 = await cg.get_variable(config[CONF_VOLTAGE_L1])
     current_l1 = await cg.get_variable(config[CONF_CURRENT_L1])
     voltage_l2 = await cg.get_variable(config[CONF_VOLTAGE_L2])
