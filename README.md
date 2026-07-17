@@ -8,30 +8,35 @@ An ESPHome external component that emulates a Carlo Gavazzi EM24 Ethernet energy
 
 ## How it works
 
-The component runs a Modbus TCP server directly on the ESP32. On each loop iteration it reads live sensor values from the ESPHome DSMR P1 component and writes them into a register array matching the EM24 register map. The Victron Cerbo GX polls this server over TCP and treats the ESP32 as a single-phase AC grid energy meter — no RS485 adapter, no USB dongle, no extra devices.
+The component runs a Modbus TCP server directly on the ESP32. Whenever the ESPHome DSMR P1 component pushes new sensor values, they are written into a register array matching the EM24 register map. The Victron Cerbo GX polls this server over TCP and treats the ESP32 as an AC grid energy meter (single-phase or three-phase) — no RS485 adapter, no USB dongle, no extra devices.
+
+If the power sensors stop delivering valid readings (e.g. the P1 cable is unplugged), the component suspends the Modbus server after `data_timeout` (default 30 s) so the Cerbo marks the meter offline instead of acting on frozen values. Service resumes automatically when data returns.
 
 ### Why EM24, not ET112?
 
 The Victron Cerbo GX uses `dbus-modbus-client` for TCP energy meters. That driver's `carlo_gavazzi.py` only recognises Carlo Gavazzi EM24 Ethernet model IDs (1648–1653) over TCP — ET112 model IDs (102–121) are only supported via RS485 serial through a separate daemon (`dbus-cgwacs`). This component emulates an EM24 so the Cerbo's TCP driver identifies and polls it correctly.
 
-## Register map (Carlo Gavazzi EM24 — single phase)
+## Register map (Carlo Gavazzi EM24)
 
 All multi-register values use **little-endian word order** (low word at lower address, `Reg_s32l`).
+Per-phase registers step by 2 per phase: L1 at the base address, L2 at base+2, L3 at base+4.
 
 | Address       | Field               | Type   | Scale        | Notes                          |
 |---------------|---------------------|--------|--------------|--------------------------------|
-| 0x0000–0x0001 | L1 Voltage          | int32  | ÷10 V        | hold-on-NaN                    |
+| 0x0000–0x0005 | Voltage L1/L2/L3    | int32  | ÷10 V        | hold-on-NaN                    |
 | 0x000B        | Model ID            | uint16 | —            | 1648 (EM24DINAV23XE1X)         |
-| 0x000C–0x000D | L1 Current          | int32  | ÷1000 A      | positive magnitude; hold-on-NaN |
-| 0x0012–0x0013 | L1 Active power     | int32  | ÷10 W        | positive = import              |
-| 0x0028–0x0029 | Total active power  | int32  | ÷10 W        | same as L1 (single phase)      |
+| 0x000C–0x0011 | Current L1/L2/L3    | int32  | ÷1000 A      | positive magnitude; hold-on-NaN |
+| 0x0012–0x0017 | Active power L1/L2/L3 | int32 | ÷10 W       | positive = import              |
+| 0x0028–0x0029 | Total active power  | int32  | ÷10 W        | sum of configured phases       |
 | 0x0033        | Frequency           | uint16 | ÷10 Hz       | hardcoded 50.0 Hz              |
 | 0x0034–0x0035 | Energy import total | int32  | ÷10 kWh      | T1+T2                          |
-| 0x0040–0x0041 | L1 energy import    | int32  | ÷10 kWh      | same as total (single phase)   |
+| 0x0040–0x0041 | L1 energy import    | int32  | ÷10 kWh      | = total (DSMR has no per-phase energy) |
+| 0x0046–0x0047 | L1 energy export    | int32  | ÷10 kWh      | = total (DSMR has no per-phase energy) |
 | 0x004E–0x004F | Energy export total | int32  | ÷10 kWh      | T1+T2                          |
 | 0x0302        | HW version          | uint16 | —            | 0x0100 (1.0.0)                 |
 | 0x0304        | FW version          | uint16 | —            | 0x0100 (1.0.0)                 |
-| 0x1002        | Phase config        | uint16 | —            | 3 = 1P (single phase)          |
+| 0x1002        | Phase config        | uint16 | —            | 3 = 1P, 0 = 3P.n (auto-selected) |
+| 0x5000–0x5006 | Serial number       | text   | —            | from `serial_number:` option, else zeros |
 | 0xa000        | Application         | uint16 | —            | 7 = H mode (required by Cerbo) |
 
 - Power is signed: positive = importing from grid, negative = exporting
@@ -107,6 +112,33 @@ grid_meter:
 ```
 
 All eight sensor keys are required. The sensor IDs must match `id:` fields on sensors already defined in your ESPHome config.
+
+### Optional configuration
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `port` | `502` | Modbus TCP listening port. The Cerbo GX expects 502, so only change this for testing. |
+| `serial_number` | *(zeros)* | Up to 14 ASCII characters, reported in the EM24 serial registers. Set a unique value per device — VRM uses it to identify the meter (recommended when running more than one). |
+| `data_timeout` | `30s` | Suspend the Modbus server when no valid power reading arrives for this long, so the Cerbo marks the meter offline instead of trusting stale data. `0s` disables the watchdog. |
+
+### Three-phase mode
+
+Add per-phase sensors for L2 and/or L3 to emulate a three-phase EM24 (`PhaseConfig` = 3P.n). Each phase group is all-or-nothing: if you set one of the four keys for a phase, you must set all four.
+
+```yaml
+grid_meter:
+  # ... the eight required keys above (they describe L1) ...
+  voltage_l2: voltage_l2
+  current_l2: current_l2
+  power_import_l2: power_delivered_l2
+  power_export_l2: power_returned_l2
+  voltage_l3: voltage_l3
+  current_l3: current_l3
+  power_import_l3: power_delivered_l3
+  power_export_l3: power_returned_l3
+```
+
+With DSMR, use the per-phase `power_delivered_l1/l2/l3` and `power_returned_l1/l2/l3` sensors (multiplied by 1000 to get W, like the totals). Total power (register 0x0028) is the sum of all configured phases. DSMR provides only total energy counters, so energy remains attributed to L1 in VRM's per-phase view; the totals are always correct.
 
 ## Victron Cerbo GX setup
 

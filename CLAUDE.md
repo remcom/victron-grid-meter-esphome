@@ -36,25 +36,27 @@ tests/
 
 ### How it works
 
-`GridMeterComponent` (a standard ESPHome `Component`) runs a non-blocking Modbus TCP server in `loop()`. On every loop it:
-1. Reads live values from eight ESPHome sensor references (populated by the DSMR P1 component)
-2. Writes them into `registers_[]` — a dense `uint16_t[80]` array covering EM24 addresses `0x0000–0x004F`
-3. Accepts/reads/processes client connections (up to 2 simultaneous)
+`GridMeterComponent` (a standard ESPHome `Component`) runs a non-blocking Modbus TCP server in `loop()`:
+1. Sensor state callbacks set `registers_dirty_`; when set, `refresh_sensors_()` rebuilds `registers_[]` — a dense `uint16_t[80]` array covering EM24 addresses `0x0000–0x004F` (event-driven, not every loop)
+2. A stale-data watchdog suspends Modbus service when no valid power reading arrives within `data_timeout` (default 30 s), so the Cerbo marks the meter offline instead of using frozen values
+3. Accepts/reads/processes client connections (up to 2 simultaneous, `TCP_NODELAY`)
 
-Sparse EM24 registers outside the dense range (`0x0302`, `0x0304`, `0x1002`, `0xa000`, `0xa100`) are handled in `get_register_()` with hardcoded constant values.
+Sensors: eight required references (L1 + energy totals, constructor parameters) plus optional per-phase L2/L3 groups (`set_phase_sensors()`, enforced all-or-none via `cv.Inclusive`). Configuring L2/L3 switches `PhaseConfig` (0x1002) from 3 (1P) to 0 (3P.n).
+
+Sparse EM24 registers outside the dense range (`0x0302`, `0x0304`, `0x1002`, `0xa000`, `0xa100`, serial at `0x5000–0x5006`) are handled in `get_register_()`.
 
 ### Key protocol details
 
 - **Why EM24, not ET112:** Victron's `dbus-modbus-client` only recognises EM24 model IDs (1648–1653) over TCP; ET112 IDs only work via RS485.
 - **Word order:** All int32 values use `Reg_s32l` (little-endian word order — low word at lower address). The pymodbus client in tests reconstructs them big-endian — see `read_int32()` in `test_grid_meter.py`.
 - **FC06/FC16 writes** are accepted as no-ops (required for Cerbo init sequence).
-- **hold-on-NaN:** Voltage and current use shadow registers (`voltage_shadow_`, `current_shadow_`) that retain the last valid value when the sensor reports NaN.
+- **hold-on-NaN:** Voltage, current, and energy counters use shadow registers that retain the last valid value when the sensor reports NaN. Power is zeroed on NaN instead (instantaneous value; the watchdog handles prolonged loss).
 - **Power sign:** net power = `power_import - power_export`; positive = importing from grid.
 - **Current:** always stored as positive magnitude regardless of power direction.
 
 ### ESPHome integration
 
-`__init__.py` declares all eight sensor keys as `cv.Required` and passes them as constructor arguments to `GridMeterComponent` via `cg.new_Pvariable()`. `cv.only_with_esp_idf` is enforced via `cv.All()` in the schema.
+`__init__.py` declares the eight L1/energy sensor keys as `cv.Required` and passes them (plus `port`) as constructor arguments via `cg.new_Pvariable()`. Optional keys: per-phase L2/L3 sensor groups, `serial_number` (≤14 chars, Reg_text at 0x5000), `data_timeout` (0 disables the watchdog). `cv.only_on_esp32` is enforced via `cv.All()` in the schema.
 
 ### Framework requirement
 
